@@ -3,8 +3,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use aes::Aes128Dec;
-use aes::cipher::generic_array::GenericArray;
-use aes::cipher::{BlockDecrypt, KeyInit};
+use aes::cipher::{BlockCipherDecrypt, KeyInit};
 use base64::Engine;
 use serde_json::Value;
 
@@ -66,10 +65,10 @@ fn read_exact<R: Read>(reader: &mut R, size: usize) -> std::io::Result<Vec<u8>> 
 
 /// AES-128-ECB decrypt with PKCS7 unpadding.
 fn aes_ecb_decrypt(key: &[u8; 16], data: &[u8]) -> Vec<u8> {
-    let cipher = Aes128Dec::new(GenericArray::from_slice(key));
+    let cipher = Aes128Dec::new(key.into());
     let mut buf = data.to_vec();
     for chunk in buf.chunks_exact_mut(16) {
-        cipher.decrypt_block(GenericArray::from_mut_slice(chunk));
+        cipher.decrypt_block(chunk.try_into().unwrap());
     }
     // PKCS7 unpadding
     let pad_len = buf[buf.len() - 1] as usize;
@@ -359,12 +358,11 @@ impl NcmFile {
                 MimeType::Jpeg
             };
 
-            let picture = Picture::new_unchecked(
-                PictureType::CoverFront,
-                Some(mime),
-                Some(String::from("Cover")),
-                image_data,
-            );
+            let picture = Picture::unchecked(image_data)
+                .pic_type(PictureType::CoverFront)
+                .mime_type(mime)
+                .description("Cover")
+                .build();
             tag.set_picture(0, picture);
         }
 
